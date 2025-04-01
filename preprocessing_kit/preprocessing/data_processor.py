@@ -12,10 +12,11 @@ Dependencies:
     - preprocessing.processor.Processor
     - utils.config (OUTLIER_CONFIG, FEATURE_ENGINEERING_CONFIG, MISSING_VALUE_CONFIG)
 """
+from typing import Optional
 
 import pandas as pd
 
-from config import MISSING_VALUE_CONFIG, OUTLIER_CONFIG, FEATURE_ENGINEERING_CONFIG
+from configuration.configuration import Configuration
 from preprocessing_kit.enrichment.features import FeatureEngineer
 from preprocessing_kit.preprocessing.missing_value_handler import MissingValueHandler
 from preprocessing_kit.preprocessing.outlier_processor import OutlierProcessor
@@ -44,7 +45,8 @@ class DataProcessor:
                  handle_unknowns: bool = True,
                  apply_preprocessing: bool = True,
                  apply_outliers_processing: bool = False,
-                 apply_feature_engineering: bool = False
+                 apply_feature_engineering: bool = False,
+                 config: Optional[Configuration] = None
                  ):
         """
         Initializes the DataProcessor instance with specified preprocessing configurations.
@@ -61,6 +63,7 @@ class DataProcessor:
         self.apply_outliers = apply_outliers_processing
         self.apply_feature_engineering = apply_feature_engineering
         self.apply_preprocessing = apply_preprocessing
+        self.config = config
 
     def handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -95,18 +98,18 @@ class DataProcessor:
             pd.DataFrame: The processed dataset.
         """
         if self.handle_unknowns:
-            missing_handler = MissingValueHandler(df, MISSING_VALUE_CONFIG)
+            missing_handler = MissingValueHandler(df, self.config.missing_values)
             df = missing_handler.preprocess()
 
         if self.handle_unknowns:
             df = self.handle_missing_values(df)
 
         if self.apply_outliers:
-            outlier_processor = OutlierProcessor(df, OUTLIER_CONFIG)
+            outlier_processor = OutlierProcessor(df, self.config.outlier_config)
             df = outlier_processor.preprocess()
 
         if self.apply_feature_engineering:
-            feature_engineer = FeatureEngineer(df, FEATURE_ENGINEERING_CONFIG)
+            feature_engineer = FeatureEngineer(df, self.config.feature_engineering)
             df = feature_engineer.preprocess()
 
         if self.apply_preprocessing:

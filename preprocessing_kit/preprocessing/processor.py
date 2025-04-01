@@ -2,7 +2,7 @@ import pandas as pd
 from typing import List, Tuple, Dict, Optional
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler, OrdinalEncoder
 
-from config import ORDINAL_MAPPINGS, ONE_HOT_COLS, CATEGORY_MAPPINGS
+from configuration.configuration import Configuration
 from .utils.encoders import ordinal_encode, one_hot_encode, define_binary_codes
 from .utils.scalers import min_max_scaler, standard_scaler
 
@@ -31,7 +31,7 @@ class Processor:
 
     def __init__(self, target_col: str, unnecessary_columns: Optional[List[str]] = None, test_size: float = 0.2,
                  random_state: int = 42, scaler_numeric: bool = True, scaling_method: str = "standard",
-                 positive_target_label="yes"):
+                 positive_target_label="yes", config: Optional[Configuration] = None):
         """
         Initializes the Processor class with configuration settings.
 
@@ -51,6 +51,7 @@ class Processor:
         self.scaler_numeric = scaler_numeric
         self.scaling_method = scaling_method
         self.positive_target_label = positive_target_label
+        self.config: Configuration = config
 
         self.ordinal_encoders: Dict[str, OrdinalEncoder] = {}
         self.one_hot_encoder: Optional[OneHotEncoder] = None
@@ -85,6 +86,47 @@ class Processor:
         """
         return [self.input_cols.index(col) for col in self.input_cols if col not in numeric_cols]
 
+    def _apply_ordinal_encoding(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        for col, categories in self.config.encoding_config.ordinal_encoder.items():
+            x_train, encoder = ordinal_encode(x_train, col, categories)
+            x_val[col] = encoder.transform(x_val[[col]])
+            self.ordinal_encoders[col] = encoder
+        return x_train, x_val
+
+    def _apply_one_hot_encoding(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        x_train, one_hot_encoder, encoded_cols = one_hot_encode(x_train, self.config.encoding_config.one_hot_encoder)
+        x_val[encoded_cols] = one_hot_encoder.transform(x_val[self.config.encoding_config.one_hot_encoder])
+        x_val = x_val.drop(columns=self.config.encoding_config.one_hot_encoder)
+        self.one_hot_encoder = one_hot_encoder
+        self.encoded_cols = encoded_cols
+        return x_train, x_val
+
+    def _apply_binary_encoding(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        if "contact" in x_train.columns:
+            x_train['contact'] = x_train['contact'].map(define_binary_codes(x_train['contact']))
+        if "contact" in x_val.columns:
+            x_val['contact'] = x_val['contact'].map(define_binary_codes(x_val['contact']))
+        return x_train, x_val
+
+    def _apply_category_mapping(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        for col, mapping in self.config.encoding_config.category_mappings.items():
+            if col in x_train.columns:
+                x_train[col] = x_train[col].map(mapping)
+            if col in x_val.columns:
+                x_val[col] = x_val[col].map(mapping)
+        return x_train, x_val
+
+    def _apply_scaling(self, x_train: pd.DataFrame, x_val: pd.DataFrame, numeric_cols: List[str]) -> Tuple[
+        pd.DataFrame, pd.DataFrame]:
+        if self.scaling_method == "minmax":
+            x_train[numeric_cols], scaler = min_max_scaler(x_train, numeric_cols)
+            x_val[numeric_cols] = scaler.transform(x_val[numeric_cols])
+        else:
+            x_train[numeric_cols], scaler = standard_scaler(x_train, numeric_cols)
+            x_val[numeric_cols] = scaler.transform(x_val[numeric_cols])
+        self.scaler = scaler
+        return x_train, x_val
+
     def process(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
         """
         Processes the given DataFrame by performing the following steps:
@@ -111,39 +153,27 @@ class Processor:
         numeric_cols = define_numerical_cols(df)
 
         # Ordinal Encoding
-        for col, categories in ORDINAL_MAPPINGS.items():
-            X_train, encoder = ordinal_encode(X_train, col, categories)
-            X_val[col] = encoder.transform(X_val[[col]])
-            self.ordinal_encoders[col] = encoder
+        if self.config.encoding_config.ordinal_encoder:
+            X_train, X_val = self._apply_ordinal_encoding(X_train, X_val)
 
-        # One-Hot Encoding
-        X_train, one_hot_encoder, encoded_cols = one_hot_encode(X_train, ONE_HOT_COLS)
-        X_val[encoded_cols] = one_hot_encoder.transform(X_val[ONE_HOT_COLS])
-        X_val = X_val.drop(columns=ONE_HOT_COLS)
-        self.one_hot_encoder = one_hot_encoder
-        self.encoded_cols = encoded_cols
+        if self.config.encoding_config.one_hot_encoder:
+            X_train, X_val = self._apply_one_hot_encoding(X_train, X_val)
 
         # Binary Encoding
         X_train['contact'] = X_train['contact'].map(define_binary_codes(X_train['contact']))
         X_val['contact'] = X_val['contact'].map(define_binary_codes(X_val['contact']))
 
+        # X_train, X_val = self._apply_binary_encoding(X_train, X_val)
+
         # Map Categorical Values
-        for col, mapping in CATEGORY_MAPPINGS.items():
-            X_train[col] = X_train[col].map(mapping)
-            X_val[col] = X_val[col].map(mapping)
+        if self.config.encoding_config.category_mappings:
+            X_train, X_val = self._apply_category_mapping(X_train, X_val)
 
         # Feature Scaling
         if self.scaler_numeric:
-            if self.scaling_method == "minmax":
-                X_train[numeric_cols], scaler = min_max_scaler(X_train, numeric_cols)
-                X_val[numeric_cols] = scaler.transform(X_val[numeric_cols])
-            else:
-                X_train[numeric_cols], scaler = standard_scaler(X_train, numeric_cols)
-                X_val[numeric_cols] = scaler.transform(X_val[numeric_cols])
-            self.scaler = scaler
+            X_train, X_val = self._apply_scaling(X_train, X_val, numeric_cols)
 
         self.input_cols = list(X_train.columns)
-
         y_train, y_val = self.__encode_target(y_train, y_val)
 
         return X_train, y_train, X_val, y_val

@@ -1,0 +1,92 @@
+{
+  "preprocessing": {
+    "handle_unknowns": true,
+    "apply_outliers": true,
+    "apply_feature_engineering": true,
+    "apply_preprocessing": true
+  },
+  "encoder": {
+    "ordinal_encoder": {
+      "education": [
+        "illiterate",
+        "basic.4y",
+        "basic.6y",
+        "basic.9y",
+        "high.school",
+        "professional.course",
+        "university.degree"
+      ]
+    },
+    "one_hot_encoder": [
+      "job",
+      "marital",
+      "housing",
+      "loan",
+      "default",
+      "poutcome"
+    ],
+    "category_mappings": {
+      "month": {
+        "jan": 1,
+        "feb": 2,
+        "mar": 3
+      },
+      "day_of_week": {
+        "mon": 1,
+        "tue": 2
+      }
+    }
+  },
+  "outlier_config": {
+    "clip_columns": {
+      "age": {
+        "upper_quantile": 0.99
+      },
+      "campaign": {
+        "upper_quantile": 0.95
+      }
+    },
+    "drop_columns": [
+      "duration"
+    ],
+    "log_transform": [
+      "campaign"
+    ],
+    "binary_features": {
+      "pdays": {
+        "threshold": 999,
+        "new_col": "was_contacted_before"
+      }
+    }
+  },
+  "missing_values": {
+    "education": {
+      "strategy": "mode"
+    }
+  },
+  "feature_engineering": {
+    "RATIO_FEATURES": [
+      [
+        "campaign",
+        "previous"
+      ]
+    ],
+    "TIME_FEATURES": {
+      "second_half_year": {
+        "column": "month",
+        "values": [
+          "jul",
+          "aug",
+          "sep",
+          "oct",
+          "nov",
+          "dec"
+        ]
+      }
+    },
+    "CONTACT_FEATURES": [
+      "total_contacts",
+      "was_previously_contacted"
+    ]
+  }
+}
