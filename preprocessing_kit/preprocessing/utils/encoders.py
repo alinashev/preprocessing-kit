@@ -37,6 +37,7 @@ def ordinal_encode(
             - The transformed DataFrame with the encoded column.
             - The fitted OrdinalEncoder that can be used for inverse transformation.
     """
+    column = column.astype(str)
     encoder = OrdinalEncoder(categories=[categories])
     df[column] = encoder.fit_transform(df[[column]])
     return df, encoder
