@@ -102,10 +102,11 @@ class Processor:
         return x_train, x_val
 
     def _apply_binary_encoding(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        if "contact" in x_train.columns:
-            x_train['contact'] = x_train['contact'].map(define_binary_codes(x_train['contact']))
-        if "contact" in x_val.columns:
-            x_val['contact'] = x_val['contact'].map(define_binary_codes(x_val['contact']))
+        for col in self.config.encoding_config.binary_encoder:
+            if col in x_train.columns:
+                x_train[col] = x_train[col].map(define_binary_codes(x_train[col]))
+            if col in x_val.columns:
+                x_val[col] = x_val[col].map(define_binary_codes(x_val[col]))
         return x_train, x_val
 
     def _apply_category_mapping(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -127,7 +128,39 @@ class Processor:
         self.scaler = scaler
         return x_train, x_val
 
-    def process(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    def _remove_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        return remove_unnecessary_columns(df, self.unnecessary_columns)
+
+    def _split(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        return split_data(df, self.target_col, self.test_size, self.random_state)
+
+    def _separate_features_target(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        X = df.drop(columns=[self.target_col])
+        y = df[self.target_col]
+        return X, X.copy(), y, y.copy()
+
+    def _encode_features(self, x_train: pd.DataFrame, x_val: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        if self.config.encoding_config.ordinal_encoder:
+            x_train, x_val = self._apply_ordinal_encoding(x_train, x_val)
+
+        if self.config.encoding_config.one_hot_encoder:
+            x_train, x_val = self._apply_one_hot_encoding(x_train, x_val)
+
+        if self.config.encoding_config.binary_encoder:
+            x_train, x_val = self._apply_binary_encoding(x_train, x_val)
+
+        if self.config.encoding_config.category_mappings:
+            x_train, x_val = self._apply_category_mapping(x_train, x_val)
+
+        return x_train, x_val
+
+    def _scale_features(self, X_train: pd.DataFrame, X_val: pd.DataFrame, numeric_cols: List[str]) -> Tuple[
+        pd.DataFrame, pd.DataFrame]:
+        if self.scaler_numeric:
+            return self._apply_scaling(X_train, X_val, numeric_cols)
+        return X_train, X_val
+
+    def process(self, df: pd.DataFrame, split: bool = True) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
         """
         Processes the given DataFrame by performing the following steps:
         1. Removes unnecessary columns.
@@ -147,33 +180,17 @@ class Processor:
                 - X_val (pd.DataFrame): Processed validation features.
                 - y_val (pd.Series): Encoded validation target.
         """
-        df = remove_unnecessary_columns(df, self.unnecessary_columns)
-        X_train, X_val, y_train, y_val = split_data(df, self.target_col, self.test_size, self.random_state)
+        df = self._remove_columns(df)
+
+        X_train, X_val, y_train, y_val = self._split(df) if split else self._separate_features_target(df)
 
         numeric_cols = define_numerical_cols(df)
 
-        # Ordinal Encoding
-        if self.config.encoding_config.ordinal_encoder:
-            X_train, X_val = self._apply_ordinal_encoding(X_train, X_val)
-
-        if self.config.encoding_config.one_hot_encoder:
-            X_train, X_val = self._apply_one_hot_encoding(X_train, X_val)
-
-        # Binary Encoding
-        X_train['contact'] = X_train['contact'].map(define_binary_codes(X_train['contact']))
-        X_val['contact'] = X_val['contact'].map(define_binary_codes(X_val['contact']))
-
-        # X_train, X_val = self._apply_binary_encoding(X_train, X_val)
-
-        # Map Categorical Values
-        if self.config.encoding_config.category_mappings:
-            X_train, X_val = self._apply_category_mapping(X_train, X_val)
-
-        # Feature Scaling
-        if self.scaler_numeric:
-            X_train, X_val = self._apply_scaling(X_train, X_val, numeric_cols)
+        X_train, X_val = self._encode_features(X_train, X_val)
+        X_train, X_val = self._scale_features(X_train, X_val, numeric_cols)
 
         self.input_cols = list(X_train.columns)
+
         y_train, y_val = self.__encode_target(y_train, y_val)
 
         return X_train, y_train, X_val, y_val

@@ -22,6 +22,10 @@ ORDINAL_MAPPINGS = {
 # Categorical columns for one-hot encoding
 ONE_HOT_COLS = ["job", "marital", "housing", "loan", "default", "poutcome"]
 
+# Categorical columns for binary encoding
+
+BINARY_COLS = ["contact"]
+
 # Direct mapping for categorical encoding
 CATEGORY_MAPPINGS = {
     "month": {

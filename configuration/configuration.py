@@ -7,6 +7,7 @@ class EncoderConfig:
     ordinal_encoder: Optional[Dict[str, List[str]]] = None
     one_hot_encoder: Optional[List[str]] = None
     category_mappings: Optional[Dict[str, Dict[str, int]]] = None
+    binary_encoder: Optional[List[str]] = None
 
 
 @dataclass

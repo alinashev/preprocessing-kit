@@ -25,6 +25,9 @@
       "default",
       "poutcome"
     ],
+    "binary_encoder": [
+      "contact"
+    ],
     "category_mappings": {
       "month": {
         "jan": 1,
